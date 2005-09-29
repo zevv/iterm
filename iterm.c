@@ -127,8 +127,8 @@ int handle_serial(int fd_in, int fd_out)
 		if (!hex_mode && (isprint(*p) || isspace(*p)) ) {
 			write(fd_out, p, 1);
 		} else {
-			r = snprintf(buf, sizeof(buf), "[%02x]", *p);
-			write(fd_out, p, r);
+			r = snprintf(buf, sizeof(buf), "[%02x]", *(unsigned char *)p);
+			write(fd_out, buf, r);
 		}
 		p++;
 	}
@@ -143,7 +143,7 @@ int handle_terminal(int fd_in, int fd_out)
 	int len;
 	static int in_hex;
 	static int escape = 0;
-	char hexval = 0;
+	static int hexval = 0;
 
 	len = read(fd_in, &c, 1);
 	
