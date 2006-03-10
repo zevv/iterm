@@ -13,7 +13,9 @@
 #include "serial.h"
 
 int hex_mode = 0;
+int binary_mode = 0;
 int timestamps = 0;
+int local_echo = 0;
 
 void usage(char *fname);
 void line(void);
@@ -34,8 +36,14 @@ int main(int argc, char **argv)
 	char ttydev[32] = "/dev/ttyS0";
 //	char buf[256];
 	
-	while( (o = getopt(argc, argv, "hrx")) != EOF) {
+	while( (o = getopt(argc, argv, "bhrx")) != EOF) {
 		switch(o) {
+			case 'b':
+				binary_mode = 1;
+				break;
+			case 'e':
+				local_echo = 1;
+				break;
 			case 'h':
 				usage(argv[0]);
 				exit(0);
@@ -91,7 +99,6 @@ int main(int argc, char **argv)
 			
 				r = handle_terminal(fd_terminal, fd_serial);
 				if(r == -1) goto cleanup;
-				
 			}
 			
 		} else if(r<0) {
@@ -124,11 +131,16 @@ int handle_serial(int fd_in, int fd_out)
 	
 	for(i=0; i<len; i++) {
 
-		if (!hex_mode && (isprint(*p) || isspace(*p)) ) {
+		if(binary_mode) {
 			write(fd_out, p, 1);
 		} else {
-			r = snprintf(buf, sizeof(buf), "[%02x]", *(unsigned char *)p);
-			write(fd_out, buf, r);
+
+			if (!hex_mode && (isprint(*p) || isspace(*p) || (*p==127) || (*p==8)) ) {
+				write(fd_out, p, 1);
+			} else {
+				r = snprintf(buf, sizeof(buf), "[%02x]", *(unsigned char *)p);
+				write(fd_out, buf, r);
+			}
 		}
 		p++;
 	}
@@ -215,6 +227,7 @@ void usage(char *fname)
 {
 	printf("usage: %s [-r] <port> <baudrate\n", fname);
 	printf("\n");
+	printf("  -b	binary mode, do interpret all control codes\n");
 	printf("  -r	use RTS/CTS hardware handshaking\n");
 	printf("  -t	Show timestamps with received data\n");
 	printf("  -x	HEX mode\n");
