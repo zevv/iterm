@@ -1,7 +1,7 @@
 
 CC 	= gcc
 LD 	= gcc
-LDFLAGS += 
+LDFLAGS += -lcurses
 CFLAGS  += -Wall -Werror -O3 
 
 BIN   	= iterm
