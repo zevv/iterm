@@ -77,6 +77,8 @@ int main(int argc, char **argv)
 	fd_terminal = 0;
 	
 	set_noncanonical(fd_serial, NULL);
+	
+	signal(SIGINT, SIG_IGN);
 
 	signal(SIGWINCH, sigwinch);
 	win = initscr();
@@ -353,8 +355,8 @@ void dump_putchar(int color, int c)
 
 	wcolor_set(win_bin, color, NULL);
 	wattron(win_bin, A_BOLD);
-	if(isprint(c) || isspace(c)) {
-		if(c == '\r') c = '\n';
+	if(isprint(c) || isspace(c) || c==0x08) {
+//		if(c == '\r') c = '\n';
 		waddch(win_bin, c);
 	} else {
 		waddch(win_bin, '.');
