@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <time.h>
 #include <sys/select.h>
+#include <sys/ioctl.h>
 #include <termios.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -13,14 +14,16 @@
 #include "serial.h"
 
 int hex_mode = 0;
-int binary_mode = 0;
+int binary_mode = 1;
 int timestamps = 0;
 int local_echo = 0;
+int translate_newline = 0;
 
 void usage(char *fname);
 void line(void);
 int handle_serial(int fd_in, int fd_out);
 int handle_terminal(int fd_in, int fd_out);
+int write_all(int fd, const void *buf, size_t count);
 
 int main(int argc, char **argv)
 {
@@ -47,6 +50,9 @@ int main(int argc, char **argv)
 			case 'h':
 				usage(argv[0]);
 				exit(0);
+			case 'n':
+				translate_newline = 1;
+				break;
 			case 'r':
 				rtscts=1;
 				break;
@@ -132,14 +138,14 @@ int handle_serial(int fd_in, int fd_out)
 	for(i=0; i<len; i++) {
 
 		if(binary_mode) {
-			write(fd_out, p, 1);
+			write_all(fd_out, p, 1);
 		} else {
 
 			if (!hex_mode && (isprint(*p) || isspace(*p) || (*p==127) || (*p==8)) ) {
-				write(fd_out, p, 1);
+				write_all(fd_out, p, 1);
 			} else {
 				r = snprintf(buf, sizeof(buf), "[%02x]", *(unsigned char *)p);
-				write(fd_out, buf, r);
+				write_all(fd_out, buf, r);
 			}
 		}
 		p++;
@@ -156,18 +162,29 @@ int handle_terminal(int fd_in, int fd_out)
 	static int in_hex;
 	static int escape = 0;
 	static int hexval = 0;
+	int r;
 
 	len = read(fd_in, &c, 1);
 	
 	if(escape) {
 	
 		if(c == '~') {
-			write(fd_out, &c, 1);
+			write_all(fd_out, &c, 1);
 		}
 		
 		else if(c == '.') {
 			putchar('\n');
 			return -1;
+		}
+
+		else if(c == 'b') {
+			r = tcsendbreak(fd_out, 0);
+			if(r == -1) {
+				printf("<brk err>");
+			} else {
+				printf("<brk>");
+			}
+			fflush(stdout);
 		}
 		
 		else if(c == 'd') {
@@ -183,10 +200,11 @@ int handle_terminal(int fd_in, int fd_out)
 		
 		else  {
 			printf("\n");
-			printf("  ~~ 	send tilde\n");
-			printf("  ~.	exit\n");
-			printf("  ~d	dtr hop\n");
-			printf("  ~xNN	enter HEX character\n");
+			printf("  ~~    send tilde\n");
+			printf("  ~.    exit\n");
+			printf("  ~b    send break\n");
+			printf("  ~d    dtr hop\n");
+			printf("  ~xNN  enter HEX character\n");
 		}
 		
 		escape = 0;
@@ -202,7 +220,7 @@ int handle_terminal(int fd_in, int fd_out)
 		hexval = (hexval << 4) + c;
 
 		if(++in_hex > 2) {
-			write(fd_out, &hexval, 1);
+			write_all(fd_out, &hexval, 1);
 			in_hex = 0;
 		}
 		
@@ -213,7 +231,10 @@ int handle_terminal(int fd_in, int fd_out)
 		if(c == '~') {
 			escape = 1;
 		} else {
-			write(fd_out, &c, 1);
+			if(translate_newline) {
+				if(c == '\n') c = '\r';
+			}
+			write_all(fd_out, &c, 1);
 		}
 	}
 	
@@ -228,6 +249,7 @@ void usage(char *fname)
 	printf("usage: %s [-r] <port> <baudrate\n", fname);
 	printf("\n");
 	printf("  -b	binary mode, do interpret all control codes\n");
+	printf("  -n    translate newline to cr\n");
 	printf("  -r	use RTS/CTS hardware handshaking\n");
 	printf("  -t	Show timestamps with received data\n");
 	printf("  -x	HEX mode\n");
@@ -238,6 +260,29 @@ void line(void)
 	int i;
 	for(i=0; i<80; i++) putchar('-');
 	putchar('\n');
+}
+
+
+int write_all(int fd, const void *buf, size_t count)
+{
+	fd_set fds;
+	size_t written = 0;
+	int r;
+
+	while(written < count) {
+
+		FD_ZERO(&fds);
+		FD_SET(fd, &fds);
+		r = select(fd+1, NULL, &fds, NULL, NULL);
+		if(r < 0) return r;
+
+		r = write(fd, buf+written, count-written);
+		if(r < 0) return r;
+
+		written += r;
+	}
+
+	return written;
 }
 
 
