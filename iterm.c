@@ -15,8 +15,6 @@
 
 int hex_mode = 0;
 int binary_mode = 1;
-int timestamps = 0;
-int local_echo = 0;
 int translate_newline = 0;
 
 void usage(char *fname);
@@ -39,13 +37,10 @@ int main(int argc, char **argv)
 	char ttydev[32] = "/dev/ttyS0";
 //	char buf[256];
 	
-	while( (o = getopt(argc, argv, "bhrx")) != EOF) {
+	while( (o = getopt(argc, argv, "bhnrx")) != EOF) {
 		switch(o) {
 			case 'b':
 				binary_mode = 1;
-				break;
-			case 'e':
-				local_echo = 1;
 				break;
 			case 'h':
 				usage(argv[0]);
@@ -55,9 +50,6 @@ int main(int argc, char **argv)
 				break;
 			case 'r':
 				rtscts=1;
-				break;
-			case 't':
-				timestamps = 1;
 				break;
 			case 'x':
 				hex_mode = 1;
@@ -251,7 +243,6 @@ void usage(char *fname)
 	printf("  -b	binary mode, do interpret all control codes\n");
 	printf("  -n    translate newline to cr\n");
 	printf("  -r	use RTS/CTS hardware handshaking\n");
-	printf("  -t	Show timestamps with received data\n");
 	printf("  -x	HEX mode\n");
 }
 
