@@ -5,13 +5,13 @@ LDFLAGS +=
 CFLAGS  += -Wall -Werror -O3 
 
 BIN   	= iterm
-FILES 	= iterm.o serial.o
+FILES 	= iterm.o serial.o mainloop.o
 
 .c.o:
 	$(CC) $(CFLAGS) -c $<
 
 $(BIN):	$(FILES)
-	$(LD) -o $@ $(FILES) $(LDFLAGS)
+	$(CC) -o $@ $(FILES) $(LDFLAGS)
 
 clean:	
 	rm -f $(FILES) $(BIN) core
