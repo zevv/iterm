@@ -25,16 +25,18 @@ static int hex_mode = 0;
 static int translate_newline = 0;
 static char hex_buf[90] = "";
 static int timestamp = 0;
+static int echo = 0;
+static int have_tty;
 
 static int get_baudrate(const char *s);
 static int on_terminal_read(int fd, void *data);
 static int on_serial_read(int fd, void *data);
 static int on_status_timer(void *data);
-void msg(const char *fmt, ...);
-void usage(char *fname);
-int write_all(int fd, const void *buf, size_t count);
+static void msg(const char *fmt, ...);
+static void usage(char *fname);
 static int on_sigint(int signo, void *data);
 static void set_hex_mode(int onoff);
+static void terminal_write(uint8_t c, int local);
 
 int main(int argc, char **argv)
 {
@@ -44,8 +46,13 @@ int main(int argc, char **argv)
 	int baudrate = 115200;
 	char ttydev[32] = "/dev/ttyS0";
 	
-	while( (o = getopt(argc, argv, "b:hnrt")) != EOF) {
+	have_tty = isatty(1);
+	
+	while( (o = getopt(argc, argv, "b:ehnrt")) != EOF) {
 		switch(o) {
+			case 'e':
+				echo = 1;
+				break;
 			case 'b':
 				baudrate = get_baudrate(optarg);
 				break;
@@ -66,7 +73,7 @@ int main(int argc, char **argv)
 				exit(0);
 		}
 	}
-
+	
 	argv += optind;
 	argc -= optind;
 
@@ -130,13 +137,68 @@ static int get_baudrate(const char *s)
 }
 
 
+static void terminal_write(uint8_t c, int local)
+{
+	char hex[3];
+
+	if(hex_mode) {
+
+		if((hex_off % 16) == 0) {
+			if(hex_buf[0]) {
+				printf("%s\n", hex_buf);
+				fflush(stdout);
+			}
+			sprintf(hex_buf, "\r%08x                                                    |                |", hex_off);
+		}
+
+		int col = hex_off % 16;
+		char *p1 = hex_buf + col * 3 + 11 + (col > 7);
+		char *p2 = hex_buf + col + 62;
+		hex_off ++;
+
+		snprintf(hex, sizeof hex, "%02x", c);
+		memcpy(p1, hex, 2);
+		*p2 = isprint(c) ? c : '.';
+
+		printf("%s", hex_buf);
+
+	} else {
+
+		if(timestamp) {
+
+			putchar(c);
+
+			if(c == '\n') {
+				struct timeval tv;
+				gettimeofday(&tv, NULL);
+				struct tm *tm = localtime(&tv.tv_sec);
+				char tbuf[32] = "";
+				strftime(tbuf, sizeof tbuf, "%H:%M:%S", tm);
+				printf("\e[1;30m%s.%03d\e[0m ", tbuf, (int)(tv.tv_usec / 1E3));
+			}
+
+		} else {
+			putchar(c);
+		}
+	}
+
+	fflush(stdout);
+
+}
+
+
+static void serial_write(uint8_t c)
+{
+	write(fd_serial, &c, 1);
+	if(echo) terminal_write(c, 1);
+}
+
+
 static int on_serial_read(int fd, void *data)
 {
 	uint8_t buf[128];
 	uint8_t *p = buf;
-	char hex[3];
 	int len;
-	int i;
 
 	len = read(fd_serial, buf, sizeof(buf));
 	if(len <= 0) {
@@ -148,56 +210,7 @@ static int on_serial_read(int fd, void *data)
 		mainloop_stop();
 	}
 
-	if(hex_mode) {
-
-		for(i=0; i<len; i++) {
-
-			if((hex_off % 16) == 0) {
-				if(hex_buf[0]) {
-					printf("%s\n", hex_buf);
-					fflush(stdout);
-				}
-				sprintf(hex_buf, "\r%08x                                                    |                |", hex_off);
-			}
-
-			int col = hex_off % 16;
-			char *p1 = hex_buf + col * 3 + 11 + (col > 7);
-			char *p2 = hex_buf + col + 62;
-			hex_off ++;
-
-			snprintf(hex, sizeof hex, "%02x", *p);
-			memcpy(p1, hex, 2);
-			*p2 = isprint(*p) ? *p : '.';
-			p++;
-		}
-
-		printf("%s", hex_buf);
-		fflush(stdout);
-
-	} else {
-
-		if(timestamp) {
-
-			for(i=0; i<len; i++) {
-				putchar(*p);
-
-				if(*p == '\n') {
-					struct timeval tv;
-					gettimeofday(&tv, NULL);
-					struct tm *tm = localtime(&tv.tv_sec);
-					char tbuf[32] = "";
-					strftime(tbuf, sizeof tbuf, "%H:%M:%S", tm);
-					printf("\e[1;30m%s.%03d\e[0m ", tbuf, (int)(tv.tv_usec / 1E3));
-				}
-				p++;
-			};
-			fflush(stdout);
-
-		} else {
-			fwrite(buf, 1, len, stdout);
-			fflush(stdout);
-		}
-	}
+	while(len--) terminal_write(*p++, 0);
 
 	return 0;
 }
@@ -248,7 +261,10 @@ static int on_terminal_read(int fd, void *data)
 		c = tolower(c);
 	
 		if(c == '~') {
-			write_all(fd_serial, &c, 1);
+			serial_write(c);
+			if(echo) {
+				terminal_write(c, 1); 
+			}
 		}
 		
 		else if(c == '.' || c == '>') {
@@ -281,6 +297,11 @@ static int on_terminal_read(int fd, void *data)
 			set_hex_mode(!hex_mode);
 		}
 		
+		else if(c == 'e') {
+			echo = !echo;
+			msg("Echo %s", echo ? "enabled" : "disabled");
+		}
+		
 		else if(c == 't') {
 			timestamp = !timestamp;
 			msg("Timestamps %s", timestamp ? "enabled" : "disabled");
@@ -297,6 +318,7 @@ static int on_terminal_read(int fd, void *data)
 			msg("d    toggle dtr");
 			msg("m    show modem status lines");
 			msg("h    toggle hex mode");
+			msg("e    toggle echo");
 			msg("t    toggle timestamp");
 			msg("xNN  enter hex character NN");
 		}
@@ -314,7 +336,7 @@ static int on_terminal_read(int fd, void *data)
 		hexval = (hexval << 4) + c;
 
 		if(++in_hex > 2) {
-			write_all(fd_serial, &hexval, 1);
+			serial_write(hexval);
 			in_hex = 0;
 		}
 		
@@ -328,7 +350,7 @@ static int on_terminal_read(int fd, void *data)
 			if(translate_newline) {
 				if(c == '\n') c = '\r';
 			}
-			write_all(fd_serial, &c, 1);
+			serial_write(c);
 		}
 	}
 	
@@ -341,7 +363,7 @@ void msg(const char *fmt, ...)
 	char buf[128];
 	va_list va;
 
-	if(!isatty(1)) return;
+	if(!have_tty) return;
 
 	va_start(va, fmt);
 	vsnprintf(buf, sizeof buf, fmt, va);
@@ -358,32 +380,10 @@ void usage(char *fname)
 	printf("usage: %s [-r] [port] [baudrate]\n", fname);
 	printf("\n");
 	printf("  -b RATE   Set baudrate to RATE\n");
+	printf("  -e        Enable local echo\n");
 	printf("  -n        translate newline to cr\n");
 	printf("  -r	    use RTS/CTS hardware handshaking\n");
 	printf("  -h	    HEX mode\n");
-}
-
-
-int write_all(int fd, const void *buf, size_t count)
-{
-	fd_set fds;
-	size_t written = 0;
-	int r;
-
-	while(written < count) {
-
-		FD_ZERO(&fds);
-		FD_SET(fd, &fds);
-		r = select(fd+1, NULL, &fds, NULL, NULL);
-		if(r < 0) return r;
-
-		r = write(fd, buf+written, count-written);
-		if(r < 0) return r;
-
-		written += r;
-	}
-
-	return written;
 }
 
 
