@@ -24,6 +24,7 @@ static int hex_off = 0;
 static int hex_mode = 0;
 static int translate_newline = 0;
 static char hex_buf[90] = "";
+static int timestamp = 0;
 
 static int get_baudrate(const char *s);
 static int on_terminal_read(int fd, void *data);
@@ -43,7 +44,7 @@ int main(int argc, char **argv)
 	int baudrate = 115200;
 	char ttydev[32] = "/dev/ttyS0";
 	
-	while( (o = getopt(argc, argv, "b:hnr")) != EOF) {
+	while( (o = getopt(argc, argv, "b:hnrt")) != EOF) {
 		switch(o) {
 			case 'b':
 				baudrate = get_baudrate(optarg);
@@ -56,6 +57,9 @@ int main(int argc, char **argv)
 				break;
 			case 'h':
 				set_hex_mode(1);
+				break;
+			case 't':
+				timestamp = 1;
 				break;
 			default:
 				usage(argv[0]);
@@ -171,7 +175,28 @@ static int on_serial_read(int fd, void *data)
 		fflush(stdout);
 
 	} else {
-		write_all(fd_terminal, buf, len);
+
+		if(timestamp) {
+
+			for(i=0; i<len; i++) {
+				putchar(*p);
+
+				if(*p == '\n' || *p == '\r') {
+					struct timeval tv;
+					gettimeofday(&tv, NULL);
+					struct tm *tm = localtime(&tv.tv_sec);
+					char tbuf[32] = "";
+					strftime(tbuf, sizeof tbuf, "%H:%M:%S", tm);
+					printf("\e[1;30m%s.%03d\e[0m ", tbuf, (int)(tv.tv_usec / 1E3));
+				}
+				p++;
+			};
+			fflush(stdout);
+
+		} else {
+			fwrite(buf, 1, len, stdout);
+			fflush(stdout);
+		}
 	}
 
 	return 0;
@@ -256,6 +281,10 @@ static int on_terminal_read(int fd, void *data)
 			set_hex_mode(!hex_mode);
 		}
 		
+		else if(c == 't') {
+			timestamp = !timestamp;
+		}
+		
 		else if(c == 'x') {
 			in_hex = 1;
 		}
@@ -267,6 +296,7 @@ static int on_terminal_read(int fd, void *data)
 			msg("d    toggle dtr");
 			msg("m    show modem status lines");
 			msg("h    toggle hex mode");
+			msg("t    toggle timestamp");
 			msg("xNN  enter hex character NN");
 		}
 		
