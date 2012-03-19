@@ -181,7 +181,7 @@ static int on_serial_read(int fd, void *data)
 			for(i=0; i<len; i++) {
 				putchar(*p);
 
-				if(*p == '\n' || *p == '\r') {
+				if(*p == '\n') {
 					struct timeval tv;
 					gettimeofday(&tv, NULL);
 					struct tm *tm = localtime(&tv.tv_sec);
@@ -283,6 +283,7 @@ static int on_terminal_read(int fd, void *data)
 		
 		else if(c == 't') {
 			timestamp = !timestamp;
+			msg("Timestamps %s", timestamp ? "enabled" : "disabled");
 		}
 		
 		else if(c == 'x') {
