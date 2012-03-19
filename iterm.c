@@ -1,6 +1,8 @@
 
 #include <stdio.h>
 #include <time.h>
+#include <stdint.h>
+#include <errno.h>
 #include <signal.h>
 #include <stdarg.h>
 #include <sys/select.h>
@@ -16,27 +18,21 @@
 #include "serial.h"
 #include "mainloop.h"
 
-int hex_mode = 0;
-int translate_newline = 0;
-
-void usage(char *fname);
-int write_all(int fd, const void *buf, size_t count);
-
-
-static int on_sigint(int signo, void *data)
-{
-	mainloop_stop();
-	return 0;
-}
-	
 static int fd_serial;
 static int fd_terminal;
+static int hex_off = 0;
+static int hex_mode = 0;
+static int translate_newline = 0;
 
 static int get_baudrate(const char *s);
 static int on_terminal_read(int fd, void *data);
 static int on_serial_read(int fd, void *data);
 static int on_status_timer(void *data);
 void msg(const char *fmt, ...);
+void usage(char *fname);
+int write_all(int fd, const void *buf, size_t count);
+static int on_sigint(int signo, void *data);
+
 
 int main(int argc, char **argv)
 {
@@ -46,7 +42,7 @@ int main(int argc, char **argv)
 	int baudrate = 115200;
 	char ttydev[32] = "/dev/ttyS0";
 	
-	while( (o = getopt(argc, argv, "b:hnrx:")) != EOF) {
+	while( (o = getopt(argc, argv, "b:hnrx")) != EOF) {
 		switch(o) {
 			case 'b':
 				baudrate = get_baudrate(optarg);
@@ -117,19 +113,38 @@ static int get_baudrate(const char *s)
 
 static int on_serial_read(int fd, void *data)
 {
-	char c[128];
+	uint8_t buf[128];
 	int len;
 	int i;
-	char *p;
 
-	len = read(fd_serial, c, sizeof(c));
-	if(len <= 0) return -1;
-	
-	p = c;
-	
-	for(i=0; i<len; i++) {
-		write_all(fd_terminal, p, 1);
-		p++;
+	len = read(fd_serial, buf, sizeof(buf));
+	if(len <= 0) {
+		if(len == 0) {
+			msg("Serial port closed");
+		} else {
+			msg("Error reading from serial port: %s", strerror(errno));
+		}
+		mainloop_stop();
+	}
+
+	if(hex_mode) {
+		for(i=0; i<len; i++) {
+
+			if((hex_off % 16) == 0) {
+				printf("\n%08x\e[61G|                |\r", hex_off);
+			}
+
+			int c = buf[i];
+			int p1 = (hex_off % 16) * 3 + 11 + ((hex_off % 16) > 7);
+			int p2 = (hex_off % 16) + 62;
+
+			printf("\e[%dG%02x\e[%dG%c", p1, c, p2, isprint(c) ? c : '.');
+			fflush(stdout);
+			hex_off ++;
+		}
+
+	} else {
+		write_all(fd_terminal, buf, len);
 	}
 
 	return 0;
@@ -305,6 +320,12 @@ int write_all(int fd, const void *buf, size_t count)
 	return written;
 }
 
+
+static int on_sigint(int signo, void *data)
+{
+	mainloop_stop();
+	return 0;
+}
 
 
 /*
