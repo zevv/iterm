@@ -23,6 +23,7 @@ static int fd_terminal;
 static int hex_off = 0;
 static int hex_mode = 0;
 static int translate_newline = 0;
+static char hex_buf[90] = "";
 
 static int get_baudrate(const char *s);
 static int on_terminal_read(int fd, void *data);
@@ -32,7 +33,7 @@ void msg(const char *fmt, ...);
 void usage(char *fname);
 int write_all(int fd, const void *buf, size_t count);
 static int on_sigint(int signo, void *data);
-
+static void set_hex_mode(int onoff);
 
 int main(int argc, char **argv)
 {
@@ -42,23 +43,23 @@ int main(int argc, char **argv)
 	int baudrate = 115200;
 	char ttydev[32] = "/dev/ttyS0";
 	
-	while( (o = getopt(argc, argv, "b:hnrx")) != EOF) {
+	while( (o = getopt(argc, argv, "b:hnr")) != EOF) {
 		switch(o) {
 			case 'b':
 				baudrate = get_baudrate(optarg);
 				break;
-			case 'h':
-				usage(argv[0]);
-				exit(0);
 			case 'n':
 				translate_newline ++;
 				break;
 			case 'r':
 				rtscts=1;
 				break;
-			case 'x':
-				hex_mode = 1;
+			case 'h':
+				set_hex_mode(1);
 				break;
+			default:
+				usage(argv[0]);
+				exit(0);
 		}
 	}
 
@@ -98,6 +99,20 @@ int main(int argc, char **argv)
 }
 
 
+static void set_hex_mode(int onoff)
+{
+	if(onoff) {
+		hex_buf[0] = '\0';
+		hex_off = 0;
+		hex_mode = 1;
+	} else {
+		printf("\n");
+		hex_mode = 0;
+	}
+	msg("Hex mode %s", onoff ? "enabled" : "disabled");
+}
+
+
 static int get_baudrate(const char *s)
 {
 	char *p;
@@ -114,6 +129,8 @@ static int get_baudrate(const char *s)
 static int on_serial_read(int fd, void *data)
 {
 	uint8_t buf[128];
+	uint8_t *p = buf;
+	char hex[3];
 	int len;
 	int i;
 
@@ -128,20 +145,30 @@ static int on_serial_read(int fd, void *data)
 	}
 
 	if(hex_mode) {
+
 		for(i=0; i<len; i++) {
 
 			if((hex_off % 16) == 0) {
-				printf("\n%08x\e[61G|                |\r", hex_off);
+				if(hex_buf[0]) {
+					printf("%s\n", hex_buf);
+					fflush(stdout);
+				}
+				sprintf(hex_buf, "\r%08x                                                    |                |", hex_off);
 			}
 
-			int c = buf[i];
-			int p1 = (hex_off % 16) * 3 + 11 + ((hex_off % 16) > 7);
-			int p2 = (hex_off % 16) + 62;
-
-			printf("\e[%dG%02x\e[%dG%c", p1, c, p2, isprint(c) ? c : '.');
-			fflush(stdout);
+			int col = hex_off % 16;
+			char *p1 = hex_buf + col * 3 + 11 + (col > 7);
+			char *p2 = hex_buf + col + 62;
 			hex_off ++;
+
+			snprintf(hex, sizeof hex, "%02x", *p);
+			memcpy(p1, hex, 2);
+			*p2 = isprint(*p) ? *p : '.';
+			p++;
 		}
+
+		printf("%s", hex_buf);
+		fflush(stdout);
 
 	} else {
 		write_all(fd_terminal, buf, len);
@@ -225,6 +252,10 @@ static int on_terminal_read(int fd, void *data)
 			serial_set_dtr(fd_serial, !status);
 		}
 		
+		else if(c == 'h') {
+			set_hex_mode(!hex_mode);
+		}
+		
 		else if(c == 'x') {
 			in_hex = 1;
 		}
@@ -235,6 +266,7 @@ static int on_terminal_read(int fd, void *data)
 			msg("b    send break");
 			msg("d    toggle dtr");
 			msg("m    show modem status lines");
+			msg("h    toggle hex mode");
 			msg("xNN  enter hex character NN");
 		}
 		
@@ -278,11 +310,13 @@ void msg(const char *fmt, ...)
 	char buf[128];
 	va_list va;
 
+	if(!isatty(1)) return;
+
 	va_start(va, fmt);
 	vsnprintf(buf, sizeof buf, fmt, va);
 	va_end(va);
 	
-	printf("\e[1;30m> %s\e[0m\n", buf);
+	printf("\r\e[K\e[1;30m> %s\e[0m\n", buf);
 }
 
 
@@ -290,11 +324,12 @@ void msg(const char *fmt, ...)
 
 void usage(char *fname)
 {
-	printf("usage: %s [-r] <port> <baudrate\n", fname);
+	printf("usage: %s [-r] [port] [baudrate]\n", fname);
 	printf("\n");
-	printf("  -n    translate newline to cr\n");
-	printf("  -r	use RTS/CTS hardware handshaking\n");
-	printf("  -x	HEX mode\n");
+	printf("  -b RATE   Set baudrate to RATE\n");
+	printf("  -n        translate newline to cr\n");
+	printf("  -r	    use RTS/CTS hardware handshaking\n");
+	printf("  -h	    HEX mode\n");
 }
 
 
