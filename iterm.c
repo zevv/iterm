@@ -79,7 +79,6 @@ int main(int argc, char **argv)
 
 	int i;
 	for(i=0; i<argc; i++) {
-		printf("%d %s\n", i, argv[i]);
 		int b = get_baudrate(argv[i]);
 		if(b > 0) {
 			baudrate = b;
