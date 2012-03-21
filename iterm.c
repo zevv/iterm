@@ -77,8 +77,16 @@ int main(int argc, char **argv)
 	argv += optind;
 	argc -= optind;
 
-	if(argc >= 1) strncpy(ttydev, argv[0], sizeof(ttydev));
-	if(argc >= 2) baudrate = get_baudrate(argv[1]);
+	int i;
+	for(i=0; i<argc; i++) {
+		printf("%d %s\n", i, argv[i]);
+		int b = get_baudrate(argv[i]);
+		if(b > 0) {
+			baudrate = b;
+		} else {
+			strncpy(ttydev, argv[i], sizeof(ttydev));
+		}
+	}
 
 	if(!strchr(ttydev, '/')) {
 		char tmp[32];
