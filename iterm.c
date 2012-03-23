@@ -395,9 +395,14 @@ static void log_write(const uint8_t *buf, size_t len)
 static void set_log_enable(int onoff, const char *fname)
 {
 	if(onoff) {
-		if(fname) {
+		if(fd_log == NULL) {
+			if(fname == NULL) fname = "iterm.log";
 			fd_log = fopen(fname, "a+");
-			if(fd_log == NULL) msg("Error opening log: %s", strerror(errno));
+			if(fd_log) {
+				msg("Writing log to %s", fname);
+			} else {
+				msg("Error opening log: %s", strerror(errno));
+			}
 		}
 		if(fd_log) {
 			log_enable = 1;
