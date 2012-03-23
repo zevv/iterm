@@ -27,6 +27,8 @@ static char hex_buf[90] = "";
 static int timestamp = 0;
 static int echo = 0;
 static int have_tty;
+static int log_enable = 0;
+static FILE *fd_log;
 
 static int get_baudrate(const char *s);
 static int on_terminal_read(int fd, void *data);
@@ -37,6 +39,9 @@ static void usage(char *fname);
 static int on_sigint(int signo, void *data);
 static void set_hex_mode(int onoff);
 static void terminal_write(uint8_t c, int local);
+static void log_write(const uint8_t *buf, size_t len);
+static void set_log_enable(int onoff, const char *fname);
+
 
 int main(int argc, char **argv)
 {
@@ -48,7 +53,7 @@ int main(int argc, char **argv)
 	
 	have_tty = isatty(1);
 	
-	while( (o = getopt(argc, argv, "b:ehnrt")) != EOF) {
+	while( (o = getopt(argc, argv, "b:ehl:nrt")) != EOF) {
 		switch(o) {
 			case 'e':
 				echo = 1;
@@ -58,6 +63,9 @@ int main(int argc, char **argv)
 				break;
 			case 'n':
 				translate_newline ++;
+				break;
+			case 'l':
+				set_log_enable(1, optarg);
 				break;
 			case 'r':
 				rtscts=1;
@@ -217,6 +225,8 @@ static int on_serial_read(int fd, void *data)
 		mainloop_stop();
 	}
 
+	log_write(buf, len);
+
 	while(len--) terminal_write(*p++, 0);
 
 	return 0;
@@ -256,12 +266,14 @@ static int on_status_timer(void *data)
 
 static int on_terminal_read(int fd, void *data)
 {
-	char c;
+	uint8_t c;
 	static int in_hex;
 	static int escape = 0;
 	static int hexval = 0;
 
 	read(fd_terminal, &c, 1);
+
+	log_write(&c, 1);
 	
 	if(escape) {
 		
@@ -314,6 +326,11 @@ static int on_terminal_read(int fd, void *data)
 			msg("Timestamps %s", timestamp ? "enabled" : "disabled");
 		}
 		
+		else if(c == 'l') {
+			set_log_enable(!log_enable, NULL);
+			msg("Logging %s", log_enable ? "enabled" : "disabled");
+		}
+		
 		else if(c == 'x') {
 			in_hex = 1;
 		}
@@ -326,6 +343,7 @@ static int on_terminal_read(int fd, void *data)
 			msg("m    show modem status lines");
 			msg("h    toggle hex mode");
 			msg("e    toggle echo");
+			msg("l    toggle logging");
 			msg("t    toggle timestamp");
 			msg("xNN  enter hex character NN");
 		}
@@ -365,6 +383,31 @@ static int on_terminal_read(int fd, void *data)
 }	
 
 
+static void log_write(const uint8_t *buf, size_t len)
+{
+	if(log_enable && fd_log) {
+		fwrite(buf, 1, len, fd_log);
+		fflush(fd_log);
+	}
+}
+
+
+static void set_log_enable(int onoff, const char *fname)
+{
+	if(onoff) {
+		if(fname) {
+			fd_log = fopen(fname, "a+");
+			if(fd_log == NULL) msg("Error opening log: %s", strerror(errno));
+		}
+		if(fd_log) {
+			log_enable = 1;
+		}
+	} else {
+		log_enable = 0;
+	}
+}
+
+
 void msg(const char *fmt, ...)
 {
 	char buf[128];
@@ -389,6 +432,7 @@ void usage(char *fname)
 	printf("  -b RATE   Set baudrate to RATE\n");
 	printf("  -e        Enable local echo\n");
 	printf("  -n        translate newline to cr\n");
+	printf("  -l PATH   Log to given file\n");
 	printf("  -r	    use RTS/CTS hardware handshaking\n");
 	printf("  -h	    HEX mode\n");
 }
