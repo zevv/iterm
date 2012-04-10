@@ -204,7 +204,14 @@ static void terminal_write(uint8_t c, int local)
 
 static void serial_write(uint8_t c)
 {
-	write(fd_serial, &c, 1);
+	int r;
+	
+	r = write(fd_serial, &c, 1);
+	if(r < 0) {
+		msg("Error writing to serial port");
+		mainloop_stop();
+		return;
+	}
 	if(echo) terminal_write(c, 1);
 }
 
@@ -270,8 +277,14 @@ static int on_terminal_read(int fd, void *data)
 	static int in_hex;
 	static int escape = 0;
 	static int hexval = 0;
+	int r;
 
-	read(fd_terminal, &c, 1);
+	r = read(fd_terminal, &c, 1);
+	if(r < 0) {
+		msg("Error reading from terminal");
+		mainloop_stop();
+		return 0;
+	}
 
 	log_write(&c, 1);
 	
