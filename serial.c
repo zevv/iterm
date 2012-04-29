@@ -12,7 +12,7 @@
 
 #include "serial.h"
 
-int serial_open(char *dev, int baudrate, int rtscts)
+int serial_open(char *dev, int baudrate, int rtscts, int xonxoff)
 {
 	int fd = 0;
 	int br = 0;
@@ -57,9 +57,10 @@ int serial_open(char *dev, int baudrate, int rtscts)
 	}
 
 	tios.c_cflag = br | CS8 | CLOCAL | CREAD;  
-	if(rtscts) tios.c_cflag |= CRTSCTS; 
 	tios.c_iflag = IGNPAR;
 	tios.c_oflag = OPOST;
+	if(rtscts) tios.c_cflag |= CRTSCTS; 
+	if(xonxoff) tios.c_iflag |= IXON | IXOFF | IXANY;
 
 	tcflush (fd, TCIFLUSH);
 	r = tcsetattr (fd, TCSANOW, &tios);
@@ -74,8 +75,6 @@ int set_noncanonical(int fd, struct termios *save)
 	int r;
 	struct termios tios;
 	
-//	fcntl(fd, F_SETFL, 0);
-
 	if(save) tcgetattr(fd, save);
 	tcgetattr(fd, &tios);
 

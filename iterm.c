@@ -48,12 +48,13 @@ int main(int argc, char **argv)
 	struct termios save;
 	int o;
 	int rtscts = 0;
+	int xonxoff = 0;
 	int baudrate = 115200;
 	char ttydev[32] = "/dev/ttyS0";
 	
 	have_tty = isatty(1);
 	
-	while( (o = getopt(argc, argv, "b:ehl:nrt")) != EOF) {
+	while( (o = getopt(argc, argv, "b:ehl:nrtx")) != EOF) {
 		switch(o) {
 			case 'e':
 				echo = 1;
@@ -75,6 +76,9 @@ int main(int argc, char **argv)
 				break;
 			case 't':
 				timestamp = 1;
+				break;
+			case 'x':
+				xonxoff = 1;
 				break;
 			default:
 				usage(argv[0]);
@@ -101,10 +105,13 @@ int main(int argc, char **argv)
 		snprintf(ttydev, sizeof ttydev, "/dev/%s", tmp);
 	}
 
-	fd_serial   = serial_open(ttydev, baudrate, rtscts);
+	fd_serial   = serial_open(ttydev, baudrate, rtscts, xonxoff);
 	fd_terminal = 0;
 	
-	msg("Connect to %s at %d bps", ttydev, baudrate);
+	msg("Connect to %s at %d bps%s%s", ttydev, baudrate,
+			rtscts ? " (RTSCTS)": "",
+			xonxoff ? " (XON/XOFF)": ""
+			);
 
 	mainloop_signal_add(SIGINT, on_sigint, NULL);
 
@@ -453,6 +460,7 @@ void usage(char *fname)
 	printf("  -l PATH   Log to given file\n");
 	printf("  -r	    use RTS/CTS hardware handshaking\n");
 	printf("  -h	    HEX mode\n");
+	printf("  -x	    Enable XON/XOFF flow control\n");
 }
 
 
