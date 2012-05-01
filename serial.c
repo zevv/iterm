@@ -19,7 +19,7 @@ int serial_open(char *dev, int baudrate, int rtscts, int xonxoff)
 	int r;
 	struct termios tios;
 
-	fd = open (dev, O_RDWR | O_NOCTTY | O_NDELAY);
+	fd = open (dev, O_RDWR | O_NOCTTY);
 	
 	if (fd < 0) {
 		perror (dev);

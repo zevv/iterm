@@ -215,7 +215,7 @@ static void serial_write(uint8_t c)
 	
 	r = write(fd_serial, &c, 1);
 	if(r < 0) {
-		msg("Error writing to serial port");
+		msg("Error writing to serial port: %s", strerror(errno));
 		mainloop_stop();
 		return;
 	}
