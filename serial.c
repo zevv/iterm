@@ -2,6 +2,7 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <stdlib.h>
+#include <limits.h>
 #include <termios.h>
 #include <string.h>
 #include <stdio.h>
@@ -12,48 +13,66 @@
 
 #include "serial.h"
 
+
+struct speed {
+	int speed;
+	int bit;
+};
+
+struct speed speed_list[] = {
+	{      50,      B50 },
+	{     300,     B300 },
+	{    1200,    B1200 },
+	{    2400,    B2400 },
+	{    4800,    B4800 },
+	{    9600,    B9600 },
+	{   19200,   B19200 },
+	{   38400,   B38400 },
+	{   57600,   B57600 },
+	{  115200,  B115200 },
+	{  230400,  B230400 },
+	{  460800,  B460800 },
+	{  500000,  B500000 },
+	{  576000,  B576000 },
+	{  921600,  B921600 },
+	{ 1000000, B1000000 },
+	{ 1152000, B1152000 },
+	{ 1500000, B1500000 },
+	{ 2000000, B2000000 },
+	{ 2500000, B2500000 },
+	{ 3000000, B3000000 },
+	{ 3500000, B3500000 },
+	{ 4000000, B4000000 },
+};
+
+
 int serial_open(char *dev, int baudrate, int rtscts, int xonxoff)
 {
 	int fd = 0;
 	int br = 0;
 	int r;
 	struct termios tios;
+	int i;
+	int d_min = INT_MAX;
+	struct speed *s;
+
+	for(i=0; i<sizeof(speed_list)/sizeof(speed_list[0]); i++) {
+		s = &speed_list[i];
+
+		int d = abs(baudrate - s->speed);
+		if(d < d_min) {
+			d_min = d;
+			br = s->bit;
+		}
+	}
+
+	if(br == 0) br = B9600;
 
 	fd = open (dev, O_RDWR | O_NOCTTY);
 	
 	if (fd < 0) {
 		perror (dev);
 		exit (1);
-	}
-
-	switch(baudrate) {
-		case      50: br =   B50;    break;
-		case     300: br =   B300;   break;
-		case    1200: br =   B1200;  break;
-		case    2400: br =   B2400;  break;
-		case    4800: br =   B4800;  break;
-		case    9600: br =   B9600;  break;
-		case   19200: br =   B19200; break;
-		case   38400: br =   B38400; break;
-		case   57600: br =   B57600; break;
-		case  115200: br =  B115200; break;
-		case  230400: br =  B230400; break;
-		case  460800: br =  B460800; break;
-		case  500000: br =  B500000; break;
-		case  576000: br =  B576000; break;
-		case  921600: br =  B921600; break;
-		case 1000000: br = B1000000; break;
-		case 1152000: br = B1152000; break;
-		case 1500000: br = B1500000; break;
-		case 2000000: br = B2000000; break;
-		case 2500000: br = B2500000; break;
-		case 3000000: br = B3000000; break;
-		case 3500000: br = B3500000; break;
-		case 4000000: br = B4000000; break;
-		default:      
-			      fprintf(stderr, "Illegal baudrate supplied\n");
-			      exit(1);
-	
 	}
 
 	tios.c_cflag = br | CS8 | CLOCAL | CREAD;  
@@ -66,7 +85,24 @@ int serial_open(char *dev, int baudrate, int rtscts, int xonxoff)
 	r = tcsetattr (fd, TCSANOW, &tios);
 	if(r != 0) printf("tcsetattr : %s\n", strerror(errno));
 
-	return(fd);
+	return fd;
+}
+
+
+int serial_get_speed(int fd)
+{
+	struct termios tios;
+	tcgetattr (fd, &tios);
+
+	int br = cfgetispeed(&tios);
+	int i;
+	for(i=0; i<sizeof(speed_list)/sizeof(speed_list[0]); i++) {
+		if(speed_list[i].bit == br) {
+			return speed_list[i].speed;
+		}
+	}
+
+	return(0);
 }
 
 

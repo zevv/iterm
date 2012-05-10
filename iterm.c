@@ -107,8 +107,10 @@ int main(int argc, char **argv)
 
 	fd_serial   = serial_open(ttydev, baudrate, rtscts, xonxoff);
 	fd_terminal = 0;
+
+	int baudrate2 = serial_get_speed(fd_serial);
 	
-	msg("Connect to %s at %d bps%s%s", ttydev, baudrate,
+	msg("Connect to %s at %d bps%s%s", ttydev, baudrate2,
 			rtscts ? " (RTSCTS)": "",
 			xonxoff ? " (XON/XOFF)": ""
 			);
@@ -152,9 +154,11 @@ static int get_baudrate(const char *s)
 	int baudrate = atoi(s);
 
 	p = strchr(s, 'k');
-	if(p) {
-		baudrate = baudrate * 1000 + atoi(p+1) * 100;
-	}
+	if(p) baudrate = baudrate * 1000 + atoi(p+1) * 100;
+	
+	p = strchr(s, 'm');
+	if(p) baudrate = baudrate * 1000000 + atoi(p+1) * 100000;
+
 	return baudrate;
 }
 
@@ -461,6 +465,11 @@ void usage(char *fname)
 	printf("  -r	    use RTS/CTS hardware handshaking\n");
 	printf("  -h	    HEX mode\n");
 	printf("  -x	    Enable XON/XOFF flow control\n");
+	printf("\n");
+	printf("Available baud rates:\n");
+	printf("  50 300 1200 2400 4800 9600 19200 38400 57600 115200\n");
+	printf("  230400 460800 500000 576000 921600 1000000 1152000 \n");
+	printf("  1500000 2000000 2500000 3000000 3500000 4000000\n");
 }
 
 
