@@ -251,18 +251,45 @@ static int on_serial_read(int fd, void *data)
 }
 
 
+struct mctrl {
+	char *name_up;
+	char *name_down;
+	int mask;
+} mctrl_list[] = {
+	{ "DTR", "dtr", TIOCM_DTR },
+	{ "DSR", "dsr", TIOCM_DSR },
+	{ "DCD", "dcd", TIOCM_CD  },
+	{ "RTS", "rts", TIOCM_RTS },
+	{ "CTS", "cts", TIOCM_CTS },
+	{ "RI" , "ri" , TIOCM_RI },
+};
+
 void show_modemstatus(void)
 {
 	char buf[64];
 	char *p = buf;
+	static int pstatus = -1;
+	int i;
+
 	int status = serial_get_mctrl(fd_serial);
-	p += sprintf(p, "[%s] ", (status & TIOCM_DTR) ? "DTR" : "dtr");
-	p += sprintf(p, "[%s] ", (status & TIOCM_DSR) ? "DSR" : "dsr");
-	p += sprintf(p, "[%s] ", (status & TIOCM_CD ) ? "DCD" : "dcd");
-	p += sprintf(p, "[%s] ", (status & TIOCM_RTS) ? "RTS" : "rts");
-	p += sprintf(p, "[%s] ", (status & TIOCM_CTS) ? "CTS" : "cts");
-	p += sprintf(p, "[%s] ", (status & TIOCM_RI)  ? "RI" : "ri");
+
+	for(i=0; i<sizeof(mctrl_list) / sizeof(mctrl_list[0]); i++) {
+		struct mctrl *m = &mctrl_list[i];
+		char *updown = " ";
+
+		if(pstatus != -1) {
+			if((status & m->mask) && !(pstatus & m->mask)) updown = "↗";
+			if(!(status & m->mask) && (pstatus & m->mask)) updown = "↘";
+		}
+		
+		p += sprintf(p, "[%s%s] ", 
+				(status & m->mask) ? m->name_up : m->name_down,
+				updown);
+	}
+
 	msg(buf);
+	
+	pstatus = status;
 }
 
 
