@@ -385,6 +385,23 @@ static int on_terminal_read(int fd, void *data)
 		else if(c == 'x') {
 			in_hex = 1;
 		}
+
+		else if(isdigit(c)) {
+
+			char fname[64];
+			snprintf(fname, sizeof fname, "%s/.iterm-%c", getenv("HOME"), c);
+			FILE *f = fopen(fname, "r");
+			if(f) {
+				char buf[32000];
+				int l = fread(buf, 1, sizeof buf, f);
+				msg("Writing buffer %c, %d bytes", c, l);
+				if(l > 0) {
+					int i;
+					for(i=0; i<l; i++) serial_write(buf[i]);
+				}
+				fclose(f);
+			}
+		}
 		
 		else  {
 			msg("~    send tilde");
