@@ -406,6 +406,7 @@ static int on_terminal_read(int fd, void *data)
 		else  {
 			msg("~    send tilde");
 			msg(".    exit");
+			msg("0..9 send contents of ~/iterm-<N> to serial port");
 			msg("b    send break");
 			msg("d    toggle dtr");
 			msg("m    show modem status lines");
