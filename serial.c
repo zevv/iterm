@@ -46,7 +46,7 @@ struct speed speed_list[] = {
 };
 
 
-int serial_open(char *dev, int baudrate, int rtscts, int xonxoff)
+int serial_open(char *dev, int baudrate, int rtscts, int xonxoff, int stopbits)
 {
 	int fd = 0;
 	int br = 0;
@@ -76,6 +76,7 @@ int serial_open(char *dev, int baudrate, int rtscts, int xonxoff)
 	}
 
 	tios.c_cflag = br | CS8 | CLOCAL | CREAD;  
+	if(stopbits == 2) tios.c_cflags |= CSTOPB;
 	tios.c_iflag = IGNPAR;
 	tios.c_oflag = OPOST;
 	if(rtscts) tios.c_cflag |= CRTSCTS; 

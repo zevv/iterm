@@ -1,11 +1,11 @@
 
 CC 	= gcc
 LD 	= gcc
-LDFLAGS += 
-CFLAGS  += -Wall -Werror -O3 
+LDFLAGS +=  
+CFLAGS  += -Wall -Werror -O3  -g 
 
 BIN   	= iterm
-FILES 	= iterm.o serial.o mainloop.o
+FILES 	= iterm.o serial.o mainloop.o speed.o
 
 .c.o:
 	$(CC) $(CFLAGS) -c $<

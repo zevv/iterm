@@ -17,6 +17,7 @@
 
 #include "serial.h"
 #include "mainloop.h"
+#include "speed.h"
 
 static int fd_serial;
 static int fd_terminal;
@@ -49,15 +50,23 @@ int main(int argc, char **argv)
 	int o;
 	int rtscts = 0;
 	int xonxoff = 0;
+	int stopbits = 1;
 	int baudrate = 115200;
-	char ttydev[32] = "/dev/ttyS0";
+	char ttydev[32] = "/dev/ttyUSB2";
+	int use_custom_baudrate = 0;
 	
 	have_tty = isatty(1);
 	
-	while( (o = getopt(argc, argv, "b:ehl:nrtx")) != EOF) {
+	while( (o = getopt(argc, argv, "2b:cehl:nrtx")) != EOF) {
 		switch(o) {
+			case '2':
+				stopbits = 2;
+				break;
 			case 'e':
 				echo = 1;
+				break;
+			case 'c':
+				use_custom_baudrate = 1;
 				break;
 			case 'b':
 				baudrate = get_baudrate(optarg);
@@ -105,8 +114,13 @@ int main(int argc, char **argv)
 		snprintf(ttydev, sizeof ttydev, "/dev/%s", tmp);
 	}
 
-	fd_serial   = serial_open(ttydev, baudrate, rtscts, xonxoff);
+	fd_serial   = serial_open(ttydev, baudrate, rtscts, xonxoff, stopbits);
 	fd_terminal = 0;
+
+	if(use_custom_baudrate) {
+		int s2 = set_speed(fd_serial, baudrate);
+		msg("Custom baudrate %d\n", s2);
+	}
 
 	int baudrate2 = serial_get_speed(fd_serial);
 	
@@ -398,6 +412,7 @@ static int on_terminal_read(int fd, void *data)
 				if(l > 0) {
 					int i;
 					for(i=0; i<l; i++) serial_write(buf[i]);
+					usleep(100);
 				}
 				fclose(f);
 			}
