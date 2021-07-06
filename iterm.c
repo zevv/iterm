@@ -16,6 +16,7 @@
 
 #include "serial.h"
 #include "mainloop.h"
+#include "speed.h"
 
 static int fd_serial;
 static int fd_terminal;
@@ -48,15 +49,35 @@ int main(int argc, char **argv)
 	int o;
 	int rtscts = 0;
 	int xonxoff = 0;
+	int stopbits = 1;
+	int set_dtr = 0;
+	int set_rts = 0;
+	int parity = 0;
 	int baudrate = 115200;
-	char ttydev[32] = "/dev/ttyS0";
+	char ttydev[64] = "/dev/ttyUSB0";
+	int use_custom_baudrate = 0;
 	
 	have_tty = isatty(1);
 	
-	while( (o = getopt(argc, argv, "b:ehl:nrtx")) != EOF) {
+	while( (o = getopt(argc, argv, "E2b:cehl:nrtxDR")) != EOF) {
 		switch(o) {
+			case '2':
+				stopbits = 2;
+				break;
 			case 'e':
 				echo = 1;
+				break;
+			case 'E':
+				parity = 1;
+				break;
+			case 'c':
+				use_custom_baudrate = 1;
+				break;
+			case 'D':
+				set_dtr = 1;
+				break;
+			case 'R':
+				set_rts = 1;
 				break;
 			case 'b':
 				baudrate = get_baudrate(optarg);
@@ -84,7 +105,7 @@ int main(int argc, char **argv)
 				exit(0);
 		}
 	}
-	
+
 	argv += optind;
 	argc -= optind;
 
@@ -94,7 +115,7 @@ int main(int argc, char **argv)
 		if(b > 0) {
 			baudrate = b;
 		} else {
-			strncpy(ttydev, argv[i], sizeof(ttydev));
+			snprintf(ttydev, sizeof(ttydev), "%s", argv[i]);
 		}
 	}
 
@@ -104,8 +125,13 @@ int main(int argc, char **argv)
 		snprintf(ttydev, sizeof ttydev, "/dev/%s", tmp);
 	}
 
-	fd_serial   = serial_open(ttydev, baudrate, rtscts, xonxoff);
+	fd_serial   = serial_open(ttydev, baudrate, rtscts, xonxoff, stopbits, parity);
 	fd_terminal = 0;
+
+	if(use_custom_baudrate) {
+		int s2 = set_speed(fd_serial, baudrate);
+		msg("Custom baudrate %d\n", s2);
+	}
 
 	int baudrate2 = serial_get_speed(fd_serial);
 	
@@ -116,6 +142,8 @@ int main(int argc, char **argv)
 
 	mainloop_signal_add(SIGINT, on_sigint, NULL);
 
+	serial_set_dtr(fd_serial, set_dtr);
+	serial_set_rts(fd_serial, set_rts);
 
 	set_noncanonical(fd_serial, NULL);
 	set_noncanonical(fd_terminal, &save);
@@ -347,7 +375,7 @@ static int on_terminal_read(int fd, void *data)
 		}
 
 		else if(c == 'b') {
-			tcsendbreak(fd_serial, 0);
+			tcsendbreak(fd_serial, 1);
 			msg("Break");
 			fflush(stdout);
 		}
@@ -397,6 +425,7 @@ static int on_terminal_read(int fd, void *data)
 				if(l > 0) {
 					int i;
 					for(i=0; i<l; i++) serial_write(buf[i]);
+					usleep(100);
 				}
 				fclose(f);
 			}
@@ -508,7 +537,10 @@ void usage(char *fname)
 	printf("  -l PATH   Log to given file\n");
 	printf("  -r	    use RTS/CTS hardware handshaking\n");
 	printf("  -h	    HEX mode\n");
+	printf("  -c        Use custom baud rate\n");
 	printf("  -x	    Enable XON/XOFF flow control\n");
+	printf("  -D	    Set DTR on at startup\n");
+	printf("  -R	    Set RTS on at startup\n");
 	printf("\n");
 	printf("Available baud rates:\n");
 	printf("  50 300 1200 2400 4800 9600 19200 38400 57600 115200\n");
