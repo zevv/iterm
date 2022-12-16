@@ -180,6 +180,8 @@ static int get_baudrate(const char *s)
 	char *p;
 	int baudrate = atoi(s);
 
+	if(baudrate == 0) return 0;
+
 	p = strchr(s, 'k');
 	if(p) baudrate = baudrate * 1000 + atoi(p+1) * 100;
 	
